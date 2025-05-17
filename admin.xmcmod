@@ -1,0 +1,105 @@
+# Sistem lebih modular untuk pawn & samp
+# tahap pengembangan
+# source awal
+
+module admin
+    import utils.time
+    import net.remote
+    import system.logger
+
+    map<string, string> adminAccounts = {
+        "Vatiera": "1234"
+        "NeoDev": "adminpass"
+    }
+
+    list<string> onlineAdmins = []
+    map<string, datetime> loginTimestamps = {}
+    map<string, list<string>> adminLogs = {}
+
+    func isAdmin(name)
+        return name in adminAccounts
+
+    func checkPassword(name, pass)
+        if not isAdmin(name)
+            return false
+        return adminAccounts[name] == pass
+
+    func loginAdmin(player, pass)
+        if not checkPassword(player.name, pass)
+            print "Login gagal untuk " + player.name
+            return false
+
+        if player.name in onlineAdmins
+            print "Sudah login sebelumnya: " + player.name
+            return true
+
+        onlineAdmins.append(player.name)
+        loginTimestamps[player.name] = now()
+        adminLogs[player.name] = []
+        showAdminPanel(player)
+        logger.log "Admin login: " + player.name
+
+        return true
+
+    func logoutAdmin(player)
+        if player.name in onlineAdmins
+            onlineAdmins.remove(player.name)
+            logger.log "Admin logout: " + player.name
+            hideAdminPanel(player)
+            return true
+        return false
+
+    func showAdminPanel(player)
+        gui panel = createPanel(title = "XMC Admin Panel")
+        panel.addLabel("Welcome, " + player.name)
+        panel.addButton("Kick Player", onClick = kickMenu)
+        panel.addButton("Ban Player", onClick = banMenu)
+        panel.addButton("View Logs", onClick = viewLogs)
+        player.showGui(panel)
+
+    func hideAdminPanel(player)
+        player.hideGui()
+
+    func kickMenu(player)
+        gui input = createInput("Enter target name to kick")
+        input.onSubmit = func(target)
+            server.kick(target, reason = "Kicked by Admin " + player.name)
+            adminLogs[player.name].append("Kicked player: " + target)
+
+    func banMenu(player)
+        gui input = createInput("Enter target name to ban")
+        input.onSubmit = func(target)
+            server.ban(target, reason = "Banned by Admin " + player.name)
+            adminLogs[player.name].append("Banned player: " + target)
+
+    func viewLogs(player)
+        if not player.name in adminLogs
+            return
+        gui panel = createPanel("Admin Logs")
+        for log in adminLogs[player.name]
+            panel.addLabel(log)
+        player.showGui(panel)
+
+    func listOnlineAdmins()
+        print "Online Admins:"
+        for admin in onlineAdmins
+            print "- " + admin
+
+    event onPlayerCommand(player, cmd, args)
+        if cmd == "/admin"
+            if loginAdmin(player, args[0])
+                player.sendMessage("Login sukses sebagai admin.")
+            else
+                player.sendMessage("Gagal login.")
+
+        if cmd == "/alogout"
+            if logoutAdmin(player)
+                player.sendMessage("Logout admin berhasil.")
+            else
+                player.sendMessage("Kamu tidak sedang login sebagai admin.")
+
+        if cmd == "/alist"
+            listOnlineAdmins()
+
+    event onPlayerLeave(player)
+        logoutAdmin(player)
